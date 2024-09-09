@@ -1,5 +1,6 @@
 from legal_research_assistant import DHARA
 import os
+import modal
 
 # Initialize the LegalResearchAssistant class
 
@@ -14,9 +15,4 @@ assistant = DHARA(
 # Load documents
 documents = assistant.load_text_files('data_summary')
 
-# Run query
-question = "What are the legal precedents for breach of contract?"
 response = assistant.run_query(documents, question)
-
-# Print the response
-print(response)
