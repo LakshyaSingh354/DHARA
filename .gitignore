@@ -1,3 +1,9 @@
 data_summary
+data
+data_json
+eval_data
+*.csv
+*.json
+*.txt
 .env
 *.zip
