@@ -1,3 +1,4 @@
+from operator import itemgetter
 import os
 import torch
 from huggingface_hub import login
@@ -8,9 +9,6 @@ from langchain.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import DocArrayInMemorySearch
-
-device = torch.device("mps") if torch.backends.mps.is_available() else "cpu"
-print(f"Using device: {device}")
 
 class DHARA:
     def __init__(self, hf_token: str, model_id: str, embedding_model_name: str):
@@ -39,25 +37,20 @@ class DHARA:
 
         # Initialize the prompt template
         self.prompt_template = PromptTemplate.from_template("""
-        You are a helpful, respectful, and honest legal research assistant. 
-        Always give the titles of the multiple cases you use to generate your response. 
-        Your main motive is to retrieve relevant cases given a query.
-        
-        Your goal is to provide accurate legal research, relevant case law, statutory interpretation, 
-        and insights into legal principles and precedents, always maintaining a focus on legal accuracy 
-        and ethical standards. Only answer to legal queries. For non-legal queries, respond that you are 
-        a legal research assistant and can only help with legal queries.
-        
-        Make a list of the title of all the 4-5 relevant documents that you retrieved from the context 
-        at the start of your response.
-        
-        Keep your response short and to the point.
+            You are a helpful, respectful, and honest legal research assistant. Answer the question using the context given to you.
 
-        Context: {context}
+            Your goal is to provide accurate legal research, relevant case law, statutory interpretation, and insights into legal principles and precedents, always maintaining a focus on legal accuracy and ethical standards. Only answer to legal queries. On any queries that are not legal just say that you are a legal research assistant and can only help with legal queries.
 
-        Question: {question}
-        """)
-        
+            Make sure to keep your response short and to the point.
+
+            Answer the question based on the context below.
+
+            Context: {context}
+
+            Question: {question}
+
+            """)
+
         # Initialize embeddings
         self.embedding_model_name = embedding_model_name
         self.embeddings = HuggingFaceEmbeddings(model_name=self.embedding_model_name)
@@ -85,17 +78,23 @@ class DHARA:
     def build_vectorstore(self, documents):
         """Build a vector store for document retrieval."""
         return DocArrayInMemorySearch.from_documents(documents, embedding=self.embeddings)
+    
+    def inspect(state):
+        """Print the state passed between Runnables in a langchain and pass it on"""
+        print(state)
+        return state
 
     def create_chain(self, retriever, prompt, question):
         """Create and execute the retrieval chain."""
+        retrieved_docs = itemgetter("question") | retriever
         chain = (
-            {"context": retriever.retrieve(question), "question": question}
+            {"context": itemgetter("question") | retriever, "question": itemgetter("question")}
             | prompt
             | self.chat_model
             | self.parser
         )
-        return chain.invoke({"question": question})
-
+        return chain.invoke({"question": question}), retrieved_docs
+    
     def run_query(self, documents, question):
         """Run a query against loaded documents using the RAG pipeline."""
         # Create embeddings and vector store for retrieval
@@ -103,5 +102,5 @@ class DHARA:
         retriever = vectorstore.as_retriever()
         
         # Run the chain with a given question
-        response = self.create_chain(retriever, self.prompt_template, question)
-        return response.split("[/INST]")[-1].strip()
+        response, retrieved_docs = self.create_chain(retriever, self.prompt_template, question)
+        return response.split("[/INST]")[-1].strip(), retrieved_docs.invoke({"question": question})
