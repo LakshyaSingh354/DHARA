@@ -1,6 +1,7 @@
 import os
 import pandas as pd
 import re
+import pickle
 import json
 
 data_dir = 'data_summary'
@@ -69,7 +70,12 @@ for filename in os.listdir(data_dir):
         data.append(case_data)
 
 df = pd.DataFrame(data)
-df.to_csv('data.csv', index=True, index_label='Case ID')
+
+# pickle the dataframe
+
+df.to_pickle('data.pkl')
+
+df.to_csv('data.csv', index=True, index_label='Case ID', doublequote=True)
 
 
 

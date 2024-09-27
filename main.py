@@ -18,7 +18,7 @@ class Model:
     def __init__(self):
         print("Loading model...")
         self.assistant = DHARA(
-            hf_token="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", 
+            hf_token=os.environ["HF_TOKEN"], 
             model_id="mistralai/Mistral-7B-Instruct-v0.2",
             embedding_model_name="sentence-transformers/all-MiniLM-L6-v2"
         )

@@ -61,40 +61,11 @@ def generate_summary(file):
     return response.text
 
 
-def structured_data(file):
-    prompt = f"""{file} \n
-    Above is the case file. I want you to go through the same in detail and provide me the below reponse in json format. 
-    Make sure to provide as much data as possible available in the file. Give me 10 queries with the following fields in a Json ARRAY with 10 different JSON objects (Make sure to follow this format).
-    Query: A natural language query representing a typical legal research question.(Here the judge will eneter the present case for which the model will search in database)(The query can be the whole present case that judge wants to solve).
-# 	•	Legal Principles: Key legal principles or precedents related to the query.
-# 	•	Relevant Sections: Extracted and highlighted sections from the relevant documents.
-# 	•	Context: Additional information about the legal context (e.g., jurisdiction, case type) that can be used to fine-tune the model's response.
-# The Query should be an actual present case that a jusdge wants to solve. A one or 2 line description of the case over which the judge is currently presiding on. 
-#  Make sure to create some imaginary case (not the same one provided above) for the queries"""
-    
-    response = model.generate_content(prompt)
-    return response.text
-
-
 files = os.listdir("data")
 print(files)
 
-for file in tqdm(files[:2], desc="Generating Summaries: "):
+for file in tqdm(files, desc="Generating Summaries: "):
     text = open(f'data/{file}', 'r').read()
     summary = generate_summary(text)
     with open(f"case_summary{file}", "w", encoding="utf-8") as outfile:
         outfile.write(summary)
-
-
-text = open(f'data/{file}','r', encoding="utf-8").read()
-
-
-files = os.listdir("data")
-print(files)
-for i, file in enumerate(files):
-    text = open(f'data/case15.txt','r', encoding="utf-8").read()
-    query = structured_data(text)
-    with open(f"data_json/query_jsoncase15", "w", encoding="utf-8") as outfile:
-        outfile.write(query)
-    print(f"Files completed {i}/400")
-    print(f"Completed File: {file}")
