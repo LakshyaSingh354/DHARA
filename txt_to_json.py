@@ -1,36 +1,31 @@
 import os
+import pandas as pd
 
-def process_files(directory):
-    for filename in os.listdir(directory):
-        if filename.endswith(".txt"):
-            file_path = os.path.join(directory, filename)
-            
-            # Display the file being processed
-            print(f"Processing file: {filename}")
-            
-            # Read the contents of the file
-            with open(file_path, 'r') as file:
-                lines = file.readlines()
-            
-            # Remove the first and last lines
-            if len(lines) > 2:
-                lines = lines[1:-1]
-                print(f"Removed first and last lines from {filename}")
-            else:
-                print(f"File {filename} has too few lines to remove.")
-            
-            # Write the modified content back to the file
-            with open(file_path, 'w') as file:
-                file.writelines(lines)
-            
-            # Rename the file with a .json extension
-            new_filename = os.path.splitext(filename)[0] + ".json"
-            new_file_path = os.path.join(directory, new_filename)
-            os.rename(file_path, new_file_path)
-            print(f"Renamed {filename} to {new_filename}\n")
+df = pd.read_pickle('data.pkl')
 
-# Specify the directory containing the txt files
-directory = "data_json"
+# Create the training data DataFrame
+train_data = pd.DataFrame()
 
-# Process the files
-process_files(directory)
+# Fill the Question column with a generic extraction request
+train_data['Question'] = ["Extract Key Issues, Relevant Statutes, Legal Precedents, Legal Doctrines, Jurisdiction, and Date from the following case:"] * len(df)
+
+# The Context column contains the full case text
+train_data['Context'] = df['Summary']
+
+# Create the JSON structure for the Answer column
+train_data['Answer'] = df.apply(lambda row: {
+    "Key Issues": row['Key Issues'],
+    "Relevant Statutes": row['Relevant Statutes and Provisions'],
+    "Legal Precedents": row['Precedents Cited'],
+    "Legal Doctrines": row['Legal Doctrines'],
+    "Jurisdiction": row['Jurisdiction'],
+    "Date": row['Date']
+}, axis=1)
+
+# Convert the dictionary to a JSON string format for each row
+train_data['Answer'] = train_data['Answer'].apply(lambda x: str(x))
+
+
+# Save the training data to a JSON file
+train_data.to_json('train_data_with_summary.json', orient='records', lines=True)
+train_data.to_pickle('train_data_with_summary.pkl')
