@@ -5,7 +5,7 @@ from llama_index.core.node_parser import SentenceSplitter
 from llama_index.core import Settings
 from llama_index.llms.gemini import Gemini
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
-from llama_index.core import SummaryIndex, VectorStoreIndex
+from llama_index.core import SummaryIndex, VectorStoreIndex, SimpleKeywordTableIndex
 from llama_index.core.tools import QueryEngineTool
 from llama_index.core.query_engine.router_query_engine import RouterQueryEngine
 from llama_index.core.selectors import LLMSingleSelector
@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from llama_index.core import get_response_synthesizer
 from custom_query_engines import SummaryQueryEngine, VectorQueryEngine
+from custom_retriever import CustomRetriever
 import shutil
 
 class RAGPipeline:
@@ -32,6 +33,7 @@ class RAGPipeline:
         self.nodes_single = None
         self.summary_index = None
         self.vector_index = None
+        self.keyword_index = None
         self.summary_query_engine = None
         self.vector_query_engine = None
         self.summary_tool = None
@@ -60,18 +62,27 @@ class RAGPipeline:
             self.summary_index = SummaryIndex(self.nodes_single)
         if self.nodes:
             self.vector_index = VectorStoreIndex(self.nodes)
+            self.keyword_index = SimpleKeywordTableIndex(self.nodes)
 
     def create_query_engines(self):
         """Create query engines for summary and vector-based retrieval."""
         if self.summary_index:
             self.summary_query_engine = SummaryQueryEngine(
-                retriever=self.summary_index.as_retriever(similarity_top_k=5),
+                retriever=self.summary_index.as_retriever(similarity_top_k=10),
                 synthesizer=get_response_synthesizer(),
                 llm = Settings.llm
             )
-        if self.vector_index:
+        if self.vector_index and self.keyword_index:
+
+            custom_retriever = CustomRetriever(
+            vector_retriever=self.vector_index.as_retriever(),
+            keyword_retriever=self.keyword_index.as_retriever(),
+            bert_model="nlpaueb/legal-bert-base-uncased",
+            mode="AND"
+        )
+
             self.vector_query_engine = VectorQueryEngine(
-                retriever=self.vector_index.as_retriever(similarity_top_k=5),
+                retriever=custom_retriever,
                 synthesizer=get_response_synthesizer(),
                 llm = Settings.llm
             )
@@ -129,22 +140,20 @@ file_uploaded = False
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Adjust this to restrict origins as needed
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"],  # Allow all methods (POST, GET, etc.)
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 
 rag_pipeline = RAGPipeline()
 
-# Define request and response models
 class QueryRequest(BaseModel):
-    question: str  # This matches the 'case' key you are sending from the frontend
+    question: str
 
 class QueryResponse(BaseModel):
-    response: str  # This will contain the model's response
+    response: str
 
-# When no file is uploaded, ensure to load default documents
 @app.post("/upload-file")
 async def upload_file(file: UploadFile = File(...)):
     """Handle file upload, save it, and update the pipeline with the new file."""
@@ -159,7 +168,7 @@ async def upload_file(file: UploadFile = File(...)):
             shutil.copyfileobj(file.file, buffer)
         
         # Reload the pipeline with the uploaded file
-        rag_pipeline.load_documents(input_dir='summaries', input_files=[upload_path])
+        rag_pipeline.load_documents(input_dir='/kaggle/input/commercial-cases-summary/data_summary', input_files=[upload_path])
         rag_pipeline.split_documents()
         rag_pipeline.create_indices()
         rag_pipeline.create_query_engines()
@@ -177,7 +186,7 @@ async def upload_file(file: UploadFile = File(...)):
 async def query_rag(request: QueryRequest):
     """Handle incoming queries and return the model's response."""
     if not file_uploaded:
-        rag_pipeline.load_documents(input_dir='summaries')
+        rag_pipeline.load_documents(input_dir='/kaggle/input/commercial-cases-summary/data_summary')
         rag_pipeline.split_documents()
         rag_pipeline.create_indices()
         rag_pipeline.create_query_engines()
@@ -190,6 +199,7 @@ async def query_rag(request: QueryRequest):
         return {"response": response}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error during query: {str(e)}")
+
 
 if __name__ == "__main__":
     import uvicorn
