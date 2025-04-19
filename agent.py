@@ -1,4 +1,5 @@
 import os
+from typing import List
 from dotenv import load_dotenv, find_dotenv
 from llama_index.core import SimpleDirectoryReader
 from llama_index.core.node_parser import SentenceSplitter
@@ -16,6 +17,7 @@ from llama_index.core import get_response_synthesizer
 from custom_query_engines import SummaryQueryEngine, VectorQueryEngine
 from custom_retriever import CustomRetriever
 import shutil
+from huggingface_hub import login
 
 class RAGPipeline:
     def __init__(self, gemini_key_env_var='GEMINI_API_KEY'):
@@ -67,25 +69,30 @@ class RAGPipeline:
     def create_query_engines(self):
         """Create query engines for summary and vector-based retrieval."""
         if self.summary_index:
+            print("Creating summary query engine...")
             self.summary_query_engine = SummaryQueryEngine(
                 retriever=self.summary_index.as_retriever(similarity_top_k=10),
                 synthesizer=get_response_synthesizer(),
                 llm = Settings.llm
             )
+            print("Summary query engine created.")
         if self.vector_index and self.keyword_index:
+            print("Creating vector query engine...")
 
-            custom_retriever = CustomRetriever(
-            vector_retriever=self.vector_index.as_retriever(),
-            keyword_retriever=self.keyword_index.as_retriever(),
-            bert_model="nlpaueb/legal-bert-base-uncased",
-            mode="AND"
-        )
+        #     custom_retriever = CustomRetriever(
+        #     vector_retriever=self.vector_index.as_retriever(),
+        #     keyword_retriever=self.keyword_index.as_retriever(),
+        #     bert_model="onnx/",
+        #     mode="AND"
+        # )
+            print("Custom retriever created.")
 
             self.vector_query_engine = VectorQueryEngine(
-                retriever=custom_retriever,
+                retriever=VectorStoreIndex(self.nodes).as_retriever(),
                 synthesizer=get_response_synthesizer(),
                 llm = Settings.llm
             )
+            print("Vector query engine created.")
 
     def create_tools(self):
         """Create query tools for summarization and vector retrieval."""
@@ -132,8 +139,9 @@ class RAGPipeline:
 # Your FastAPI app and endpoint definitions...
 
 UPLOAD_DIR = "uploads"
-if not os.path.exists(UPLOAD_DIR):
-    os.makedirs(UPLOAD_DIR)
+if os.path.exists(UPLOAD_DIR):
+    shutil.rmtree(UPLOAD_DIR)
+os.makedirs(UPLOAD_DIR)
 
 file_uploaded = False
 
@@ -151,57 +159,65 @@ rag_pipeline = RAGPipeline()
 class QueryRequest(BaseModel):
     question: str
 
-class QueryResponse(BaseModel):
-    response: str
-
-@app.post("/upload-file")
-async def upload_file(file: UploadFile = File(...)):
-    """Handle file upload, save it, and update the pipeline with the new file."""
+@app.post("/upload-files")
+async def upload_files(files: List[UploadFile] = File(...)):
+    """Handle multiple file uploads, save them, and update the pipeline."""
+    global file_uploaded
     try:
-        # Validate file type (optional)
-        if not file.filename.endswith(('.txt', '.pdf', '.docx')):
-            raise HTTPException(status_code=400, detail="Unsupported file type. Please upload a .txt, .pdf, or .docx file.")
+        uploaded_file_paths = []
+
+        # Save all uploaded files to the local directory
+        for file in files:
+            if not file.filename.endswith(('.txt', '.pdf', '.docx')):
+                raise HTTPException(status_code=400, detail="Unsupported file type. Please upload .txt, .pdf, or .docx files.")
+            
+            upload_path = os.path.join(UPLOAD_DIR, file.filename)
+            with open(upload_path, "wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
+            uploaded_file_paths.append(upload_path)
         
-        # Save the uploaded file to the local directory
-        upload_path = os.path.join(UPLOAD_DIR, file.filename)
-        with open(upload_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-        
-        # Reload the pipeline with the uploaded file
-        rag_pipeline.load_documents(input_dir='/kaggle/input/commercial-cases-summary/data_summary', input_files=[upload_path])
+        # Reload the pipeline with the uploaded files
+        rag_pipeline.load_documents(input_dir=UPLOAD_DIR, input_files=uploaded_file_paths)
+        print(f"Loaded documents from {uploaded_file_paths}")
         rag_pipeline.split_documents()
+        print(f"Split documents into nodes")
         rag_pipeline.create_indices()
+        print(f"Created indices")
         rag_pipeline.create_query_engines()
+        print(f"Created query engines")
         rag_pipeline.create_tools()
+        print(f"Created tools: {rag_pipeline.summary_tool}, {rag_pipeline.vector_tool}")
         rag_pipeline.create_router_engine()
+        print("Router engine created successfully.")
 
         file_uploaded = True
-        return {"message": "File uploaded successfully", "file_path": upload_path, "file_size": file.file._file.tell()}
+        return {"message": "Files uploaded successfully", "file_paths": uploaded_file_paths}
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error uploading file: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error uploading files: {str(e)}")
 
-# The query endpoint remains unchanged
 @app.post("/query")
 async def query_rag(request: QueryRequest):
     """Handle incoming queries and return the model's response."""
+    global file_uploaded
     if not file_uploaded:
-        rag_pipeline.load_documents(input_dir='/kaggle/input/commercial-cases-summary/data_summary')
+        print("No files uploaded. Loading default documents...")
+        # Load default documents if no files are uploaded
+        rag_pipeline.load_documents(input_dir='summaries')
         rag_pipeline.split_documents()
         rag_pipeline.create_indices()
         rag_pipeline.create_query_engines()
         rag_pipeline.create_tools()
         rag_pipeline.create_router_engine()
+
     query = request.question
     try:
-        # Use the RAG pipeline to query the uploaded file or default documents
+        # Use the RAG pipeline to query the uploaded or default documents
         response = rag_pipeline.query(query)
         return {"response": response}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error during query: {str(e)}")
-
-
+    
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
-
+    uvicorn.run(app, host="0.0.0.0", port=80)

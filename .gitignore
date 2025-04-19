@@ -11,3 +11,5 @@ query_case_mapping_rel.json
 *.zip
 *.pkl
 *.txt
+sentence-transformers
+*pyc

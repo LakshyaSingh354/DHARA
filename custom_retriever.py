@@ -1,4 +1,6 @@
-from transformers import BertTokenizer, BertForSequenceClassification
+from transformers import AutoTokenizer
+from optimum.onnxruntime import ORTModelForSequenceClassification
+
 import torch
 from llama_index.core.retrievers import (
     BaseRetriever,
@@ -31,8 +33,9 @@ class CustomRetriever(BaseRetriever):
         self._mode = mode
         
         # Load the BERT model for reranking
-        self.tokenizer = BertTokenizer.from_pretrained(bert_model)
-        self.model = BertForSequenceClassification.from_pretrained(bert_model)
+        self.tokenizer = AutoTokenizer.from_pretrained("onnx/")
+
+        self.model = ORTModelForSequenceClassification.from_pretrained("onnx/", file_name='model_quantized.onnx')
         
         super().__init__()
 
