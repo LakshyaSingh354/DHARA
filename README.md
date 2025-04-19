@@ -1,4 +1,4 @@
-# Project Report: DHARA - Digital Hub for Advanced Research in Adjudication
+# DHARA - Digital Hub for Advanced Research in Adjudication
 
 ## 1. Introduction
 
