@@ -143,14 +143,3 @@ DHARA’s performance is expected to be evaluated using standard metrics:
 ### Conclusion
 
 DHARA represents a significant advancement in legal technology, leveraging AI and ML to address critical challenges. Its features, from predictive analytics to multilingual support, position it as a valuable tool for modernizing legal research and adjudication. As legal systems evolve, DHARA’s innovative approach promises to enhance efficiency, accessibility, and equity in justice delivery.
-
-## Key Citations
-
-- DHARA Project PDF
-- BERT: Pre-training of Deep Bidirectional Transformers
-- Attention is All You Need Paper
-- The Llama 3 Herd of Models
-- Indian Kanoon Legal Database
-- SCC Online Legal Research Platform
-- Manupatra Legal Information Resource
-- DHARA Application
